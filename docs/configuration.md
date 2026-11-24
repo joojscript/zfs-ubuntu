@@ -18,7 +18,7 @@ python3 installer/lib/config.py validate config/host.yaml
 | `timezone` | `Etc/UTC` | IANA zone, e.g. `America/Sao_Paulo`. |
 | `locale` | `en_US.UTF-8` | Generated and set as default. |
 | `release` | `resolute` | Ubuntu codename debootstrapped. 26.04 LTS = `resolute`. |
-| `desktop` | `ubuntu` | `ubuntu` installs GNOME; `none` for a headless/server box. |
+| `desktop` | `ubuntu` | `ubuntu` installs GNOME (gdm3); `kde` installs KDE Plasma (`kubuntu-desktop` + sddm); `none` for a headless/server box. The installed desktop is chosen here, **not** by which live ISO you boot the installer from (the base is debootstrapped). Profiles are defined in `ansible/group_vars/all.yml` (`desktop_profiles`). |
 
 ## `storage`
 

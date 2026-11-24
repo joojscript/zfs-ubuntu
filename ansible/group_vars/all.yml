@@ -37,11 +37,19 @@ flatpak_remotes:
 flatpak_apps: []
 # e.g. flatpak_apps: [org.mozilla.firefox, com.spotify.Client]
 
-# Desktop (role: desktop).
-desktop_metapackage: ubuntu-desktop-minimal
-desktop_extra_packages:
-  - gnome-tweaks
-  - gnome-shell-extension-manager
+# Desktop (role: desktop). The profile is chosen by system.desktop in
+# host.yaml ('ubuntu' = GNOME, 'kde' = KDE Plasma). 'none' skips the role.
+desktop_profiles:
+  ubuntu:
+    metapackage: ubuntu-desktop-minimal
+    display_manager: gdm3
+    extras:
+      - gnome-tweaks
+      - gnome-shell-extension-manager
+  kde:
+    metapackage: kubuntu-desktop
+    display_manager: sddm
+    extras: []
 
 # Docker (role: docker).
 docker_users: ["{{ system.username | default('john') }}"]

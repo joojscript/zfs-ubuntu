@@ -16,7 +16,7 @@
         "timezone": { "type": "string" },
         "locale": { "type": "string" },
         "release": { "type": "string", "pattern": "^[a-z]+$" },
-        "desktop": { "enum": ["ubuntu", "none"] }
+        "desktop": { "enum": ["ubuntu", "kde", "none"] }
       }
     },
     "storage": {

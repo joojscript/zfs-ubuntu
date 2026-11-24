@@ -1,22 +1,30 @@
 ---
-- name: Install Ubuntu desktop (GNOME)
+- name: Resolve desktop profile
+  ansible.builtin.set_fact:
+    desktop_meta: "{{ desktop_profiles[desktop_selected].metapackage }}"
+    desktop_dm: "{{ desktop_profiles[desktop_selected].display_manager }}"
+    desktop_extras_effective: "{{ desktop_profiles[desktop_selected].extras }}"
+  vars:
+    desktop_selected: "{{ system.desktop | default('ubuntu') }}"
+
+- name: Install the desktop metapackage and display manager
   ansible.builtin.apt:
     name:
-      - "{{ desktop_metapackage }}"
-      - gdm3
+      - "{{ desktop_meta }}"
+      - "{{ desktop_dm }}"
       - network-manager
     state: present
     update_cache: true
 
 - name: Install desktop extras
   ansible.builtin.apt:
-    name: "{{ desktop_extra_packages }}"
+    name: "{{ desktop_extras_effective }}"
     state: present
-  when: desktop_extra_packages | length > 0
+  when: desktop_extras_effective | length > 0
 
 - name: Enable the display manager
   ansible.builtin.systemd:
-    name: gdm3
+    name: "{{ desktop_dm }}"
     enabled: true
   failed_when: false
 

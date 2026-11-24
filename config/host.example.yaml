@@ -21,7 +21,12 @@ system:
   locale: en_US.UTF-8
   # Ubuntu release codename installed by debootstrap. 26.04 LTS == "resolute".
   release: resolute
-  # Desktop flavour installed by the `desktop` Ansible role: ubuntu | none
+  # Desktop flavour installed by the `desktop` Ansible role:
+  #   ubuntu -> GNOME + gdm3
+  #   kde    -> KDE Plasma (kubuntu-desktop) + sddm
+  #   none   -> headless, no desktop/display manager
+  # Note: this is independent of which live ISO you boot the installer from;
+  # the base system is debootstrapped, so the ISO flavour does not matter.
   desktop: ubuntu
 
 storage:
