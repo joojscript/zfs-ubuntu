@@ -1,0 +1,47 @@
+---
+# Installing proprietary NVIDIA drivers rebuilds DKMS modules and the
+# initramfs — exactly the kind of change that can break boot. Always take a
+# recovery snapshot first, and rebuild the dracut initramfs after.
+- name: Take a pre-NVIDIA recovery snapshot
+  ansible.builtin.command: /usr/local/sbin/ubuntu-snapshot create before-nvidia-driver
+  changed_when: true
+  failed_when: false
+
+- name: Install driver detection tooling
+  ansible.builtin.apt:
+    name:
+      - ubuntu-drivers-common
+      - dkms
+    state: present
+    update_cache: true
+
+- name: Auto-select and install recommended NVIDIA driver
+  ansible.builtin.command: ubuntu-drivers install
+  register: nvidia_auto
+  changed_when: "'No drivers found' not in nvidia_auto.stdout"
+  when: nvidia_driver_package == 'auto'
+
+- name: Install pinned NVIDIA driver package
+  ansible.builtin.apt:
+    name: "{{ nvidia_driver_package }}"
+    state: present
+  when: nvidia_driver_package != 'auto'
+
+- name: Find installed kernel version
+  ansible.builtin.shell: "set -o pipefail; ls -1 /lib/modules | sort -V | tail -1"
+  args:
+    executable: /bin/bash
+  register: nvidia_kver
+  changed_when: false
+
+- name: Rebuild dracut initramfs so the new kmod is included
+  ansible.builtin.command: "dracut --force --kver {{ nvidia_kver.stdout }}"
+  changed_when: true
+  when: nvidia_kver.stdout | length > 0
+
+- name: Remind about reboot and recovery
+  ansible.builtin.debug:
+    msg: >-
+      NVIDIA driver installed. Reboot to activate. A 'before-nvidia-driver'
+      snapshot exists; if X/Wayland fails to start, pick the previous
+      environment in ZFSBootMenu and run 'ubuntu-be' to recover.

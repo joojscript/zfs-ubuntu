@@ -1,0 +1,24 @@
+---
+- name: Install development packages
+  ansible.builtin.apt:
+    name: "{{ dev_apt_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure ~/.local/bin exists for the user
+  ansible.builtin.file:
+    path: "/home/{{ system.username }}/.local/bin"
+    state: directory
+    owner: "{{ system.username }}"
+    group: "{{ system.username }}"
+    mode: "0755"
+  when: system.username is defined
+
+# fd-find and ripgrep install as fdfind on Ubuntu; provide an 'fd' shim.
+- name: Provide 'fd' symlink for fd-find
+  ansible.builtin.file:
+    src: /usr/bin/fdfind
+    dest: "/home/{{ system.username }}/.local/bin/fd"
+    state: link
+  when: system.username is defined
+  failed_when: false

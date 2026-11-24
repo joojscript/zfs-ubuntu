@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# apt-zfs-snapshot — invoked by APT before package changes (DPkg::Pre-Invoke).
+# Creates ONE recovery snapshot of the active boot environment per APT
+# transaction. Deduplicates the multiple dpkg invocations APT makes within a
+# single run using a short time-window marker.
+#
+# Failure policy: if the snapshot cannot be created, ABORT the package
+# operation (exit non-zero) rather than silently proceeding unprotected.
+set -euo pipefail
+
+PREFIX="zbm"
+WINDOW_SECONDS=90
+MARKER_DIR="/run/ubuntu-declarative"
+MARKER="${MARKER_DIR}/apt-snapshot.stamp"
+
+log() { logger -t apt-zfs-snapshot "$*" 2>/dev/null || true; echo "apt-zfs-snapshot: $*"; }
+
+# Only act on a ZFS root.
+root_src="$(findmnt -no SOURCE,FSTYPE / 2>/dev/null || true)"
+case "$root_src" in
+  *zfs) : ;;
+  *) exit 0 ;;
+esac
+
+be="$(findmnt -no SOURCE / 2>/dev/null)"; be="${be%@*}"
+[[ -n "$be" ]] || { log "cannot determine boot environment; aborting apt"; exit 1; }
+
+mkdir -p "$MARKER_DIR"
+
+# Dedup: if we snapshotted within the window, this is the same transaction.
+if [[ -f "$MARKER" ]]; then
+  age=$(( $(date +%s) - $(stat -c %Y "$MARKER" 2>/dev/null || echo 0) ))
+  if (( age < WINDOW_SECONDS )); then
+    exit 0
+  fi
+fi
+
+snap="${be}@${PREFIX}_$(date -u +%Y%m%dT%H%M%SZ)_apt"
+if zfs snapshot "$snap"; then
+  date +%s >"$MARKER"
+  log "created pre-APT snapshot ${snap}"
+else
+  log "FAILED to create snapshot ${snap}; aborting APT to keep the system protected"
+  exit 1
+fi
+
+# Capacity guard (warn only; never block apt for space alone).
+pool="${be%%/*}"
+cap="$(zpool list -H -o capacity "$pool" 2>/dev/null | tr -d '%' || echo 0)"
+thresh="${ZBM_CAPACITY_WARN:-80}"
+if [[ "${cap:-0}" -ge "$thresh" ]]; then
+  log "WARNING: pool ${pool} is ${cap}% full"
+fi
+exit 0

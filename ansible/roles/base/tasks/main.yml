@@ -1,0 +1,46 @@
+---
+- name: Set timezone (community.general)
+  community.general.timezone:
+    name: "{{ system.timezone | default('Etc/UTC') }}"
+  when: system.timezone is defined
+  failed_when: false  # community.general may be absent on a minimal host
+
+- name: Set timezone (fallback via timedatectl)
+  ansible.builtin.command: "timedatectl set-timezone {{ system.timezone }}"
+  when: system.timezone is defined
+  changed_when: false
+
+- name: Ensure locale is generated
+  community.general.locale_gen:
+    name: "{{ system.locale | default('en_US.UTF-8') }}"
+    state: present
+  failed_when: false
+
+- name: Update APT cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base utilities
+  ansible.builtin.apt:
+    name: "{{ base_extra_packages }}"
+    state: present
+
+- name: Install unattended security upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+- name: Enable fstrim timer (SSD/zvol TRIM)
+  ansible.builtin.systemd:
+    name: fstrim.timer
+    enabled: true
+    state: started
+  failed_when: false
+
+- name: Enable firewall (deny incoming, allow outgoing)
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+  failed_when: false

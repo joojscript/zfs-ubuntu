@@ -1,0 +1,76 @@
+---
+# ubuntu-declarative provisioning playbook.
+# Receives the full host.yaml as extra-vars (system/storage/boot/snapshots/
+# provisioning/features) via provision.sh. Every role is individually gated by
+# a feature flag or a sensible default, so re-running is safe and idempotent.
+- name: Provision Ubuntu desktop/workstation
+  hosts: localhost
+  become: true
+  gather_facts: true
+
+  vars:
+    # Defaults so the playbook is runnable even without full extra-vars.
+    system:
+      username: "{{ lookup('env','SUDO_USER') | default('john', true) }}"
+      desktop: ubuntu
+    features:
+      nvidia: false
+      flatpak: true
+      docker: false
+      development_tools: true
+      chezmoi:
+        enabled: false
+        repo: ""
+        branch: main
+    snapshots:
+      enabled: true
+      hourly: 12
+      daily: 7
+      weekly: 4
+      monthly: 3
+
+  pre_tasks:
+    - name: Confirm this is a ZFS root (provisioning is for installed hosts)
+      ansible.builtin.command: findmnt -no FSTYPE /
+      register: rootfs
+      changed_when: false
+      failed_when: false
+
+    - name: Warn if root is not ZFS
+      ansible.builtin.debug:
+        msg: >-
+          Root filesystem is '{{ rootfs.stdout }}', not zfs. Provisioning will
+          continue but snapshot integration assumes a ZFS root.
+      when: rootfs.stdout != 'zfs'
+
+  roles:
+    - role: base
+      tags: [base]
+
+    - role: snapshots
+      tags: [snapshots]
+      when: snapshots.enabled | default(true)
+
+    - role: desktop
+      tags: [desktop]
+      when: (system.desktop | default('ubuntu')) != 'none'
+
+    - role: development
+      tags: [development]
+      when: features.development_tools | default(true)
+
+    - role: flatpak
+      tags: [flatpak]
+      when: features.flatpak | default(false)
+
+    - role: docker
+      tags: [docker]
+      when: features.docker | default(false)
+
+    - role: nvidia
+      tags: [nvidia]
+      when: features.nvidia | default(false)
+
+    - role: chezmoi
+      tags: [chezmoi]
+      when: (features.chezmoi.enabled | default(false)) and (features.chezmoi.repo | default('') | length > 0)

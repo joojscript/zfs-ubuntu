@@ -1,0 +1,35 @@
+---
+# Optional dotfile management. Runs as the target user, never as root, and
+# applies via chezmoi (which backs up/merges rather than clobbering).
+- name: Install chezmoi (apt)
+  ansible.builtin.apt:
+    name: chezmoi
+    state: present
+    update_cache: true
+  failed_when: false
+
+- name: Check whether chezmoi is available
+  ansible.builtin.command: chezmoi --version
+  register: chezmoi_check
+  changed_when: false
+  failed_when: false
+
+- name: Install chezmoi via official script (fallback if not in apt)
+  ansible.builtin.shell: |
+    set -o pipefail
+    sh -c "$(curl -fsLS get.chezmoi.io)" -- -b /usr/local/bin
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/chezmoi
+  when: chezmoi_check.rc != 0
+
+- name: Initialise and apply dotfiles for the user
+  become: true
+  become_user: "{{ system.username }}"
+  ansible.builtin.command: >-
+    chezmoi init --apply --branch {{ features.chezmoi.branch | default('main') }}
+    {{ features.chezmoi.repo }}
+  args:
+    creates: "/home/{{ system.username }}/.local/share/chezmoi/.git"
+  environment:
+    CHEZMOI_NO_TTY: "1"

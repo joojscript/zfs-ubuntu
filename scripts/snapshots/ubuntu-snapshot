@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# ubuntu-snapshot — manage recovery snapshots of the OS boot environment.
+#
+#   ubuntu-snapshot create <label>   create a protected manual snapshot now
+#   ubuntu-snapshot list             list snapshots of the boot environment
+#   ubuntu-snapshot status           pool/snapshot health + free space
+#   ubuntu-snapshot prune            run sanoid pruning (respects protections)
+#
+# Manual and APT snapshots use the 'zbm_' prefix. Sanoid only prunes snapshots
+# it created ('autosnap_'), so manual recovery points are never auto-deleted.
+set -euo pipefail
+
+PREFIX="zbm"
+CAP_WARN="${ZBM_CAPACITY_WARN:-80}"
+
+die() { echo "error: $*" >&2; exit 1; }
+need_root() { [[ "$(id -u)" -eq 0 ]] || die "must run as root"; }
+
+# Determine the active boot environment dataset from the mounted root.
+active_be() {
+  local ds
+  ds="$(findmnt -no SOURCE / 2>/dev/null || true)"
+  [[ "$ds" == *@* ]] && ds="${ds%@*}"
+  [[ -n "$ds" ]] || die "cannot determine active boot environment"
+  printf '%s' "$ds"
+}
+
+be_root() {
+  # The ROOT container, e.g. rpool/ROOT
+  local be; be="$(active_be)"
+  printf '%s' "${be%/*}"
+}
+
+timestamp() { date -u +%Y%m%dT%H%M%SZ; }
+
+cmd_create() {
+  need_root
+  local label="${1:-manual}"
+  label="${label//[^A-Za-z0-9_.-]/_}"
+  local be snap
+  be="$(active_be)"
+  snap="${be}@${PREFIX}_$(timestamp)_${label}"
+  echo "Creating recovery snapshot: ${snap}"
+  zfs snapshot "${snap}"
+  echo "OK. This snapshot is PROTECTED from sanoid auto-pruning."
+  check_capacity
+}
+
+cmd_list() {
+  local be; be="$(active_be)"
+  echo "Boot environment: ${be}"
+  echo
+  printf '%-55s %10s %10s %s\n' "SNAPSHOT" "USED" "REFER" "CREATION"
+  zfs list -H -t snapshot -o name,used,refer,creation -s creation "${be}" 2>/dev/null \
+    | while IFS=$'\t' read -r name used refer creation; do
+        printf '%-55s %10s %10s %s\n' "$name" "$used" "$refer" "$creation"
+      done
+}
+
+check_capacity() {
+  local pool cap
+  pool="$(active_be)"; pool="${pool%%/*}"
+  cap="$(zpool list -H -o capacity "$pool" | tr -d '%')"
+  if [[ "${cap:-0}" -ge "${CAP_WARN}" ]]; then
+    echo "WARNING: pool '${pool}' is ${cap}% full (threshold ${CAP_WARN}%). Prune old snapshots or add space." >&2
+  fi
+}
+
+cmd_status() {
+  local pool; pool="$(active_be)"; pool="${pool%%/*}"
+  echo "== zpool health =="
+  zpool status -x "$pool" || true
+  echo
+  echo "== capacity =="
+  zpool list -o name,size,alloc,free,capacity,health "$pool"
+  echo
+  echo "== boot environments =="
+  zfs list -H -o name,used,creation -r "$(be_root)" 2>/dev/null | sed 's/^/  /'
+  echo
+  echo "== recent recovery snapshots =="
+  zfs list -t snapshot -o name,used,creation -s creation 2>/dev/null \
+    | grep "@${PREFIX}_" | tail -10 | sed 's/^/  /' || echo "  (none)"
+  echo
+  echo "== sanoid timer =="
+  systemctl is-active sanoid.timer 2>/dev/null || echo "  sanoid.timer not active"
+  check_capacity
+}
+
+cmd_prune() {
+  need_root
+  command -v sanoid >/dev/null || die "sanoid not installed"
+  echo "Running sanoid --prune-snapshots (manual 'zbm_' snapshots are never pruned)"
+  sanoid --prune-snapshots --verbose
+}
+
+main() {
+  local cmd="${1:-status}"; shift || true
+  case "$cmd" in
+    create) cmd_create "$@" ;;
+    list)   cmd_list ;;
+    status) cmd_status ;;
+    prune)  cmd_prune ;;
+    -h|--help|help)
+      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) die "unknown command: $cmd (try: create|list|status|prune)" ;;
+  esac
+}
+main "$@"

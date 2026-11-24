@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/local/ubuntu-declarative/config/schema/host.schema.json",
+  "title": "ubuntu-declarative host configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["system", "storage", "boot"],
+  "properties": {
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "username"],
+      "properties": {
+        "hostname": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+        "username": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" },
+        "timezone": { "type": "string" },
+        "locale": { "type": "string" },
+        "release": { "type": "string", "pattern": "^[a-z]+$" },
+        "desktop": { "enum": ["ubuntu", "none"] }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disk", "pool_name"],
+      "properties": {
+        "disk": { "type": "string", "minLength": 1 },
+        "pool_name": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_.:-]*$" },
+        "filesystem": { "enum": ["zfs"] },
+        "pool_compatibility": { "type": "string" },
+        "ashift": { "type": "integer", "minimum": 9, "maximum": 16 },
+        "swap_size_mib": { "type": "integer", "minimum": 0 },
+        "encryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "boot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manager"],
+      "properties": {
+        "manager": { "enum": ["zfsbootmenu"] },
+        "esp_size_mib": { "type": "integer", "minimum": 256 },
+        "secure_boot": { "type": "boolean" },
+        "kernel_cmdline": { "type": "string" }
+      }
+    },
+    "snapshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "before_apt": { "type": "boolean" },
+        "hourly": { "type": "integer", "minimum": 0 },
+        "daily": { "type": "integer", "minimum": 0 },
+        "weekly": { "type": "integer", "minimum": 0 },
+        "monthly": { "type": "integer", "minimum": 0 },
+        "capacity_warn_percent": { "type": "integer", "minimum": 1, "maximum": 99 }
+      }
+    },
+    "provisioning": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "playbook": { "type": "string" }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "nvidia": { "type": "boolean" },
+        "flatpak": { "type": "boolean" },
+        "docker": { "type": "boolean" },
+        "development_tools": { "type": "boolean" },
+        "chezmoi": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "repo": { "type": "string" },
+            "branch": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

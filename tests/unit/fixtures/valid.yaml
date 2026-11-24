@@ -1,0 +1,18 @@
+system:
+  hostname: test-host
+  username: tester
+  timezone: America/Sao_Paulo
+  locale: en_US.UTF-8
+  release: resolute
+  desktop: ubuntu
+storage:
+  disk: /dev/disk/by-id/virtio-testdisk0
+  pool_name: rpool
+  encryption:
+    enabled: false
+boot:
+  manager: zfsbootmenu
+  secure_boot: false
+features:
+  docker: true
+  flatpak: false

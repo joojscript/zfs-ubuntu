@@ -1,0 +1,32 @@
+# Managed by ubuntu-declarative (snapshots role). Do not edit by hand.
+# Retention comes from host.yaml -> snapshots.*
+#
+# NOTE: sanoid autoprune only removes snapshots IT created (autosnap_*).
+# Manual and APT recovery snapshots use the 'zbm_' prefix and are NEVER pruned
+# automatically, protecting known-good recovery points.
+
+[{{ snapshots_be }}]
+    use_template = os
+    recursive = yes
+
+[{{ snapshots_pool }}/home]
+    use_template = home
+    recursive = yes
+
+[template_os]
+    frequently = 0
+    hourly = {{ snapshots.hourly | default(12) }}
+    daily = {{ snapshots.daily | default(7) }}
+    weekly = {{ snapshots.weekly | default(4) }}
+    monthly = {{ snapshots.monthly | default(3) }}
+    autosnap = yes
+    autoprune = yes
+
+[template_home]
+    frequently = 0
+    hourly = 0
+    daily = {{ (snapshots.daily | default(7)) * 2 }}
+    weekly = {{ snapshots.weekly | default(4) }}
+    monthly = {{ (snapshots.monthly | default(3)) * 2 }}
+    autosnap = yes
+    autoprune = yes

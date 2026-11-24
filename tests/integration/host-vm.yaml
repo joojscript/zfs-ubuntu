@@ -1,0 +1,30 @@
+# Test host config for the disposable QEMU guest (vm-test.sh).
+# The disk matches the virtio serial set by the harness.
+system:
+  hostname: zfs-vm
+  username: tester
+  timezone: Etc/UTC
+  locale: en_US.UTF-8
+  release: resolute
+  desktop: none            # keep the VM install fast; provisioning tested separately
+storage:
+  disk: /dev/disk/by-id/virtio-zfsroot
+  pool_name: rpool
+  pool_compatibility: openzfs-2.2
+  swap_size_mib: 0
+  encryption:
+    enabled: false
+boot:
+  manager: zfsbootmenu
+  secure_boot: false
+  kernel_cmdline: "quiet"
+snapshots:
+  enabled: true
+  before_apt: true
+provisioning:
+  enabled: false
+features:
+  nvidia: false
+  flatpak: false
+  docker: false
+  development_tools: false

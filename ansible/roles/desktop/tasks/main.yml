@@ -1,0 +1,32 @@
+---
+- name: Install Ubuntu desktop (GNOME)
+  ansible.builtin.apt:
+    name:
+      - "{{ desktop_metapackage }}"
+      - gdm3
+      - network-manager
+    state: present
+    update_cache: true
+
+- name: Install desktop extras
+  ansible.builtin.apt:
+    name: "{{ desktop_extra_packages }}"
+    state: present
+  when: desktop_extra_packages | length > 0
+
+- name: Enable the display manager
+  ansible.builtin.systemd:
+    name: gdm3
+    enabled: true
+  failed_when: false
+
+- name: Let NetworkManager manage networking
+  ansible.builtin.systemd:
+    name: NetworkManager
+    enabled: true
+    state: started
+  failed_when: false
+
+- name: Set graphical target as default
+  ansible.builtin.command: systemctl set-default graphical.target
+  changed_when: false

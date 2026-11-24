@@ -1,0 +1,7 @@
+---
+- name: Restart sanoid timer
+  ansible.builtin.systemd:
+    name: sanoid.timer
+    state: restarted
+    enabled: true
+  failed_when: false

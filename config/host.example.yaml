@@ -1,0 +1,85 @@
+# =============================================================================
+# ubuntu-declarative — primary host configuration
+# =============================================================================
+# Copy this file to config/host.yaml and edit it. The installer and the
+# provisioner both read the SAME file, so a host is fully described here.
+#
+#   sudo ./install.sh   --config config/host.yaml --plan
+#   sudo ./install.sh   --config config/host.yaml --apply
+#        ./provision.sh  --config config/host.yaml
+#
+# Only `storage.disk` has no safe default: you MUST set it to a persistent
+# /dev/disk/by-id/ path. Everything else has sane defaults.
+# -----------------------------------------------------------------------------
+
+system:
+  hostname: ubuntu-desktop
+  username: john
+  # The user password is NOT stored here. The installer prompts for it
+  # interactively (or reads config/secrets.env if present — see docs).
+  timezone: America/Sao_Paulo
+  locale: en_US.UTF-8
+  # Ubuntu release codename installed by debootstrap. 26.04 LTS == "resolute".
+  release: resolute
+  # Desktop flavour installed by the `desktop` Ansible role: ubuntu | none
+  desktop: ubuntu
+
+storage:
+  # REQUIRED. Use a stable by-id path, never /dev/sda. Find it with:
+  #   ls -l /dev/disk/by-id/
+  disk: /dev/disk/by-id/REPLACE_ME
+  pool_name: rpool
+  filesystem: zfs          # only zfs is supported
+  # Pool feature-flag compatibility set. Pinning to openzfs-2.2 guarantees a
+  # prebuilt / slightly older ZFSBootMenu EFI image can always import the pool,
+  # even after Ubuntu upgrades OpenZFS. Do NOT loosen this casually.
+  pool_compatibility: openzfs-2.2
+  ashift: 12
+  # Swap as a zvol on the pool. 0 disables swap. Hibernate is NOT supported
+  # on a ZFS swap zvol (documented limitation).
+  swap_size_mib: 2048
+  encryption:
+    enabled: false
+    # When enabled, native ZFS encryption with a passphrase prompted at boot
+    # by ZFSBootMenu. The passphrase is entered interactively during install
+    # and is NEVER written to this file or to any boot artifact.
+    # Only the whole 'rpool' is encrypted (single-key). See docs/configuration.md.
+
+boot:
+  manager: zfsbootmenu     # only zfsbootmenu is supported
+  # ESP size in MiB. 512 comfortably holds two ZBM images + a rescue copy.
+  esp_size_mib: 512
+  # Secure Boot is NOT supported by this workflow. If firmware has it enabled
+  # the installer stops with instructions unless you set this to true to
+  # acknowledge you have disabled it / understand the consequences.
+  secure_boot: false
+  # Extra kernel cmdline appended to the org.zfsbootmenu:commandline property.
+  kernel_cmdline: "quiet splash"
+
+snapshots:
+  enabled: true
+  before_apt: true         # install the APT pre-upgrade snapshot hook
+  # Sanoid retention. These map directly to sanoid.conf.
+  hourly: 12
+  daily: 7
+  weekly: 4
+  monthly: 3
+  # Free-space guard: warn (and refuse auto-prune of protected points) when the
+  # pool crosses this capacity percentage.
+  capacity_warn_percent: 80
+
+provisioning:
+  enabled: true
+  playbook: ansible/site.yml
+
+# Feature toggles. Each maps to an Ansible role that is skipped when false.
+features:
+  nvidia: false
+  flatpak: true
+  docker: false
+  development_tools: true
+  # Chezmoi dotfiles. repo empty => role is skipped.
+  chezmoi:
+    enabled: false
+    repo: ""               # e.g. https://github.com/john/dotfiles.git
+    branch: main

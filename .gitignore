@@ -1,0 +1,17 @@
+# Local host configuration & secrets — never commit.
+config/host.yaml
+config/secrets.env
+
+# Disposable VM artifacts.
+.vm/
+*.qcow2
+*.fd
+
+# Ansible local state.
+ansible/.galaxy/
+*.retry
+
+# Logs & scratch.
+*.log
+__pycache__/
+*.pyc

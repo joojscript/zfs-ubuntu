@@ -1,0 +1,50 @@
+---
+# Static provisioning knobs that are NOT part of host.yaml (which describes the
+# machine identity/storage). Override per-host by editing this file or adding a
+# host_vars entry. host.yaml values (system/features/snapshots) arrive as
+# extra-vars and take precedence over anything here.
+
+# Extra APT packages installed by the base role.
+base_extra_packages:
+  - htop
+  - tmux
+  - rsync
+  - unzip
+  - zip
+  - jq
+  - tree
+  - net-tools
+  - pciutils
+  - usbutils
+
+# Development packages (role: development). Extend freely.
+dev_apt_packages:
+  - git
+  - build-essential
+  - pkg-config
+  - python3-pip
+  - python3-venv
+  - golang-go
+  - nodejs
+  - npm
+  - ripgrep
+  - fd-find
+
+# Flatpak applications (role: flatpak). Empty by default.
+flatpak_remotes:
+  - name: flathub
+    url: https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak_apps: []
+# e.g. flatpak_apps: [org.mozilla.firefox, com.spotify.Client]
+
+# Desktop (role: desktop).
+desktop_metapackage: ubuntu-desktop-minimal
+desktop_extra_packages:
+  - gnome-tweaks
+  - gnome-shell-extension-manager
+
+# Docker (role: docker).
+docker_users: ["{{ system.username | default('john') }}"]
+
+# NVIDIA (role: nvidia). 'auto' lets ubuntu-drivers choose; or pin e.g. 'nvidia-driver-560'.
+nvidia_driver_package: auto

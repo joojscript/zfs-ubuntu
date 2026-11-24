@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# ubuntu-update — recovery-friendly system update.
+#
+#   1. Create a named, verified recovery snapshot.
+#   2. apt update && apt full-upgrade.
+#   3. Rebuild the initramfs and sanity-check boot components.
+#   4. Report whether the system APPEARS ready to reboot.
+#
+# This never declares success merely because apt exited 0. It verifies the
+# snapshot, the pool, the ESP/ZBM image, and a current kernel+initramfs.
+set -euo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+[[ "$(id -u)" -eq 0 ]] || die "must run as root"
+
+LABEL="before-update"
+be="$(findmnt -no SOURCE / 2>/dev/null)"; be="${be%@*}"
+[[ "$be" == */* ]] || die "root is not on ZFS; refusing"
+pool="${be%%/*}"
+snap="${be}@zbm_$(date -u +%Y%m%dT%H%M%SZ)_${LABEL}"
+
+echo "==> 1/4 Creating recovery snapshot ${snap}"
+zfs snapshot "$snap"
+zfs list -t snapshot "$snap" >/dev/null 2>&1 || die "snapshot verification failed"
+echo "    verified."
+
+echo "==> 2/4 Applying updates"
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get -y full-upgrade
+
+echo "==> 3/4 Rebuilding initramfs"
+kver="$(ls -1 /lib/modules | sort -V | tail -1)"
+if command -v dracut >/dev/null; then
+  dracut --force --kver "$kver"
+else
+  update-initramfs -u -k all
+fi
+
+echo "==> 4/4 Verifying boot readiness"
+ok=1
+zpool status -x "$pool" | grep -q "is healthy" || { echo "  ! pool not reported healthy"; ok=0; }
+[[ -f "/boot/efi/EFI/zbm/vmlinuz.EFI" ]] || { echo "  ! ZFSBootMenu image missing on ESP"; ok=0; }
+ls /boot/vmlinuz-"$kver" >/dev/null 2>&1 || ls /boot/vmlinuz* >/dev/null 2>&1 || { echo "  ! no kernel in /boot"; ok=0; }
+ls /boot/initrd.img-"$kver" >/dev/null 2>&1 || ls /boot/initr* >/dev/null 2>&1 || { echo "  ! no initramfs in /boot"; ok=0; }
+cmdline="$(zfs get -H -o value org.zfsbootmenu:commandline "$be" 2>/dev/null || true)"
+[[ -n "$cmdline" && "$cmdline" != "-" ]] || echo "  ! org.zfsbootmenu:commandline not set on $be"
+
+echo
+if [[ "$ok" == "1" ]]; then
+  echo "System APPEARS ready to reboot. Recovery point: ${snap}"
+  echo "If the new system misbehaves after reboot, pick the previous environment in ZFSBootMenu."
+else
+  echo "WARNING: boot readiness checks found problems (see '!' above)."
+  echo "Do NOT assume the update is safe. Recovery point available: ${snap}"
+  exit 2
+fi

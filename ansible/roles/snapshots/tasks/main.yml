@@ -1,0 +1,57 @@
+---
+- name: Install sanoid
+  ansible.builtin.apt:
+    name: sanoid
+    state: present
+    update_cache: true
+
+- name: Detect boot-environment and pool
+  ansible.builtin.shell: |
+    set -o pipefail
+    be="$(findmnt -no SOURCE /)"; be="${be%@*}"
+    echo "be=$be"
+    echo "pool=${be%%/*}"
+  args:
+    executable: /bin/bash
+  register: snapshots_be_info
+  changed_when: false
+
+- name: Set snapshot facts
+  ansible.builtin.set_fact:
+    snapshots_be: "{{ snapshots_be_info.stdout_lines | select('match', 'be=') | first | regex_replace('^be=', '') }}"
+    snapshots_pool: "{{ snapshots_be_info.stdout_lines | select('match', 'pool=') | first | regex_replace('^pool=', '') }}"
+
+- name: Template sanoid.conf from retention policy
+  ansible.builtin.template:
+    src: sanoid.conf.j2
+    dest: /etc/sanoid/sanoid.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart sanoid timer
+
+- name: Install snapshot wrapper commands
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../scripts/snapshots/{{ item }}"
+    dest: "/usr/local/sbin/{{ item }}"
+    mode: "0755"
+  loop:
+    - ubuntu-snapshot
+    - ubuntu-be
+    - ubuntu-update
+    - apt-zfs-snapshot
+
+- name: Register APT pre-upgrade snapshot hook
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/80-zfs-snapshot
+    mode: "0644"
+    content: |
+      // Managed by ubuntu-declarative (snapshots role).
+      DPkg::Pre-Invoke { "/usr/local/sbin/apt-zfs-snapshot || exit 1"; };
+  when: snapshots.before_apt | default(true)
+
+- name: Enable sanoid timer
+  ansible.builtin.systemd:
+    name: sanoid.timer
+    enabled: true
+    state: started

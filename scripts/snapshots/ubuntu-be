@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# ubuntu-be — manage ZFS boot environments for recovery.
+#
+# This is the HOST-SIDE complement to ZFSBootMenu. Use it when the system still
+# boots but you want to turn a recovery point into a permanent environment, or
+# change which environment is the default.
+#
+#   ubuntu-be list
+#   ubuntu-be create <new-be-name> <snapshot>
+#       Create a NEW, permanent boot environment cloned from a snapshot.
+#       Non-destructive: the current and broken environments are retained.
+#   ubuntu-be activate <be-name>
+#       Make <be-name> the default boot environment (sets bootfs).
+#   ubuntu-be destroy <be-name>
+#       Destroy a boot environment (refuses the currently-running one).
+#
+# Recovering a broken system is usually done from ZFSBootMenu itself (select a
+# snapshot and boot, or clone it). See docs/recovery.md.
+set -euo pipefail
+
+die() { echo "error: $*" >&2; exit 1; }
+need_root() { [[ "$(id -u)" -eq 0 ]] || die "must run as root"; }
+
+active_be() { local d; d="$(findmnt -no SOURCE / 2>/dev/null)"; echo "${d%@*}"; }
+be_root()   { local b; b="$(active_be)"; echo "${b%/*}"; }
+pool()      { local b; b="$(active_be)"; echo "${b%%/*}"; }
+
+cmd_list() {
+  local cur; cur="$(active_be)"
+  local bootfs; bootfs="$(zpool get -H -o value bootfs "$(pool)")"
+  echo "default (bootfs): ${bootfs}"
+  echo "running:          ${cur}"
+  echo
+  printf '%-40s %10s %-8s %s\n' "BOOT ENVIRONMENT" "USED" "FLAGS" "ORIGIN"
+  zfs list -H -o name,used,origin -r "$(be_root)" 2>/dev/null \
+    | awk 'NF>=2 && $1 != "'"$(be_root)"'"' \
+    | while IFS=$'\t' read -r name used origin; do
+        local flags=""
+        [[ "$name" == "$cur" ]] && flags+="R"
+        [[ "$name" == "$bootfs" ]] && flags+="D"
+        printf '%-40s %10s %-8s %s\n' "$name" "$used" "${flags:--}" "${origin:--}"
+      done
+  echo
+  echo "FLAGS: R=running  D=default(boot)"
+}
+
+cmd_create() {
+  need_root
+  local name="${1:?usage: ubuntu-be create <new-be-name> <snapshot>}"
+  local snap="${2:?usage: ubuntu-be create <new-be-name> <snapshot>}"
+  zfs list -t snapshot "$snap" >/dev/null 2>&1 || die "no such snapshot: $snap"
+  local target; target="$(be_root)/${name}"
+  zfs list "$target" >/dev/null 2>&1 && die "boot environment already exists: $target"
+  echo "Cloning ${snap} -> ${target}"
+  zfs clone -o canmount=noauto -o mountpoint=/ "$snap" "$target"
+  # Promote so the new BE does not depend on the (possibly broken) origin.
+  zfs promote "$target" || true
+  echo "Created permanent boot environment: ${target}"
+  echo "Activate it with:  ubuntu-be activate ${name}"
+}
+
+cmd_activate() {
+  need_root
+  local name="${1:?usage: ubuntu-be activate <be-name>}"
+  local target; target="$(be_root)/${name}"
+  zfs list "$target" >/dev/null 2>&1 || die "no such boot environment: $target"
+  echo "Setting default boot environment to ${target}"
+  zpool set "bootfs=${target}" "$(pool)"
+  zfs set canmount=noauto "$target"
+  echo "OK. ZFSBootMenu will boot ${target} by default on next reboot."
+  echo "The previous environment is retained for debugging."
+}
+
+cmd_destroy() {
+  need_root
+  local name="${1:?usage: ubuntu-be destroy <be-name>}"
+  local target; target="$(be_root)/${name}"
+  [[ "$target" == "$(active_be)" ]] && die "refusing to destroy the running environment"
+  [[ "$target" == "$(zpool get -H -o value bootfs "$(pool)")" ]] && \
+    die "refusing to destroy the default (bootfs) environment; activate another first"
+  echo "Destroying ${target}"
+  zfs destroy -r "$target"
+  echo "OK"
+}
+
+main() {
+  local cmd="${1:-list}"; shift || true
+  case "$cmd" in
+    list) cmd_list ;;
+    create) cmd_create "$@" ;;
+    activate) cmd_activate "$@" ;;
+    destroy) cmd_destroy "$@" ;;
+    -h|--help|help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' ;;
+    *) die "unknown command: $cmd" ;;
+  esac
+}
+main "$@"

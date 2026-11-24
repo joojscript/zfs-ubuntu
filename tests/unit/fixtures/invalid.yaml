@@ -1,0 +1,9 @@
+system:
+  hostname: test-host
+  username: tester
+storage:
+  # disk left at the placeholder — must fail validation
+  disk: /dev/disk/by-id/REPLACE_ME
+  pool_name: rpool
+boot:
+  manager: zfsbootmenu
